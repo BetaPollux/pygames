@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 """Memory puzzle game.
 
-Based on the Pygae book by Al Sweigart.
+Based on the Pygame book by Al Sweigart.
 The game board is a grid of boxes, each hiding a random icon,
 defined by a shape and a color.
 Click a box to reveal an icon, and try to find the matching icon.
@@ -50,6 +50,14 @@ ALLSHAPES = ('donut',
 assert len(ALLCOLORS) * len(ALLSHAPES) * 2 >= BOARDWIDTH * BOARDHEIGHT
 
 
+def createBoard() -> tuple:
+    board = getRandomizedBoard(BOARDWIDTH, BOARDHEIGHT)
+    revealed = generateRevealedBoxesData(False, BOARDWIDTH, BOARDHEIGHT)
+    pygame.time.wait(500)
+    startGameAnimation(board)
+    return (board, revealed)
+
+
 def main() -> None:
     """Main game loop"""
     global FPSCLOCK
@@ -62,10 +70,8 @@ def main() -> None:
     DISPLAYSURF = pygame.display.set_mode((WINDOWWIDTH, WINDOWHEIGHT))
 
     mousePos = (0, 0)
-    firstSelection = None
-    mainBoard = getRandomizedBoard(BOARDWIDTH, BOARDHEIGHT)
-    revealedBoxes = generateRevealedBoxesData(False, BOARDWIDTH, BOARDHEIGHT)
-    startGameAnimation(mainBoard)
+    selection = []
+    mainBoard, revealedBoxes = createBoard()
 
     while True:
         mouseClicked = False
@@ -81,18 +87,45 @@ def main() -> None:
                 pygame.quit()
                 sys.exit()
 
+        doBoxHighlight(revealedBoxes, mousePos)
         if mouseClicked:
-            handleClick(mainBoard, revealedBoxes, mousePos)
+            handleClick(mainBoard, revealedBoxes, mousePos, selection)
+
+        if hasWon(revealedBoxes):
+            gameWonAnimation(mainBoard)
+            pygame.time.wait(2000)
+            mainBoard, revealedBoxes = createBoard()
 
         pygame.display.update()
         FPSCLOCK.tick(FPS)
 
 
-def handleClick(board: list, revealed: list, mousePos: tuple) -> None:
+def doBoxHighlight(revealed: list, mousePos: tuple) -> None:
     box = getBoxCell(mousePos)
-    if box:
-        logging.debug(box)
-        revealed[box[0]][box[1]] = True
+    if box and not iconVisible(revealed, box):
+        drawHighlightBox(box)
+
+
+def handleClick(board: list, revealed: list,
+                mousePos: tuple, selection: list) -> None:
+    box = getBoxCell(mousePos)
+    if box and box not in selection:
+        selection.append(box)
+        setIconVisible(revealed, box, True)
+        revealBoxesAnimation(board, [box])
+        logging.debug('Selection:' + str(selection))
+        if len(selection) > 1:
+            icon1 = getShapeAndColor(board, selection[0])
+            icon2 = getShapeAndColor(board, selection[1])
+            if icon1 == icon2:
+                logging.debug('Match')
+            else:
+                logging.debug('Mismatch')
+                pygame.time.wait(1000)
+                coverBoxesAnimation(board, selection)
+                for s in selection:
+                    setIconVisible(revealed, s, False)
+            selection.clear()
 
 
 def getRandomizedBoard(width: int, height: int) -> list:
@@ -130,6 +163,19 @@ def startGameAnimation(board: list) -> None:
         coverBoxesAnimation(board, group)
 
 
+def gameWonAnimation(board: list) -> None:
+    """Show game won animation"""
+    coveredBoxes = generateRevealedBoxesData(True,
+                                             BOARDWIDTH,
+                                             BOARDHEIGHT)
+    colors = [LIGHTBGCOLOR, BGCOLOR] * 6
+    logging.debug(colors)
+    for color in colors:
+        drawBoard(board, coveredBoxes, color)
+        pygame.display.update()
+        pygame.time.wait(300)
+
+
 def drawBoxCovers(board: list, boxes: list, coverage: int) -> None:
     """Draw boxes partially covered by a rectangle of width 'coverage'"""
     for box in boxes:
@@ -153,6 +199,12 @@ def coverBoxesAnimation(board: list, group: list) -> None:
     """Show the cover animation for the given group of boxes"""
     for coverage in range(0, BOXSIZE + REVEALSPEED, REVEALSPEED):
         drawBoxCovers(board, group, coverage)
+
+
+def drawHighlightBox(box: tuple) -> None:
+    rect = pygame.Rect((0, 0), (BOXSIZE + 10, BOXSIZE + 10))
+    rect.center = getBoxRect(box).center
+    pygame.draw.rect(DISPLAYSURF, HIGHLIGHTCOLOR, rect, width=4)
 
 
 def generateRevealedBoxesData(revealed: bool,
@@ -243,13 +295,17 @@ def drawIcon(board: list, box: tuple) -> None:
     drawFunc[shape](color, box)
 
 
+def setIconVisible(revealed: list, box: tuple, visible: bool) -> None:
+    revealed[box[0]][box[1]] = visible
+
+
 def iconVisible(revealed: list, box: tuple) -> bool:
     return revealed[box[0]][box[1]]
 
 
-def drawBoard(board: list, revealed: list) -> None:
+def drawBoard(board: list, revealed: list, color=BGCOLOR) -> None:
     """Draw the game board, using the revealed mask to show/hide icons"""
-    DISPLAYSURF.fill(BGCOLOR)
+    DISPLAYSURF.fill(color)
     for box in ((i, j) for i in range(BOARDWIDTH) for j in range(BOARDHEIGHT)):
         if iconVisible(revealed, box):
             drawIcon(board, box)
@@ -258,7 +314,11 @@ def drawBoard(board: list, revealed: list) -> None:
 
 
 def hasWon(revealed: list) -> bool:
-    pass
+    """Returns True if all boxes are revealed"""
+    for col in revealed:
+        if False in col:
+            return False
+    return True
 
 
 if __name__ == '__main__':
