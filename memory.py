@@ -109,7 +109,7 @@ def doBoxHighlight(revealed: list, mousePos: tuple) -> None:
 def handleClick(board: list, revealed: list,
                 mousePos: tuple, selection: list) -> None:
     box = getBoxCell(mousePos)
-    if box and box not in selection:
+    if box and not iconVisible(revealed, box):
         selection.append(box)
         setIconVisible(revealed, box, True)
         revealBoxesAnimation(board, [box])
